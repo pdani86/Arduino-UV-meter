@@ -15,14 +15,12 @@
 
 Adafruit_NeoPixel pixels1(VU_PIX_NUM, VU_LED_PIN_1, NEO_RGB + NEO_KHZ800);
 
-
 unsigned long time_effect;
 unsigned long time_measure;
 unsigned int led_flag;
 
 unsigned int x;
 byte VU_brightness[VU_PIX_NUM];
-byte Red , Green , Blue;
 
 unsigned int analog_r[ANALOG_SAMPLES]; //Analog right channel variable
 unsigned int analog_l[ANALOG_SAMPLES]; //Analog left channel variable
@@ -30,6 +28,21 @@ unsigned int analog_l[ANALOG_SAMPLES]; //Analog left channel variable
 unsigned int average_r;
 unsigned int average_l;
 
+struct Color {
+	byte r;
+	byte g;
+	byte b;
+};
+
+Color colorStates[7] = {
+	{20, 0, 0},
+	{20, 0, 0},
+	{20, 0, 0},
+	{0, 20, 0},
+	{0, 20, 0},
+	{0, 0, 20},
+	{0, 0, 20}
+};
 
 void setup() {
   pinMode(ANALOG_R_PIN  , INPUT);
@@ -52,10 +65,6 @@ void setup() {
   led_flag=1;
   
   x=0;
-  
-  Red=0;
-  Green=0;
-  Blue=50;
 
   for (int i=0; i<ANALOG_SAMPLES; i++){
     analog_r[i]=0;
@@ -64,10 +73,45 @@ void setup() {
 
 }
 
-void loop() {
-  if(millis()>=time_measure){
+void updatePixels(const Color& color) {
+	for(int i=0 ; i<VU_PIX_NUM ; i++){
+		pixels1.setPixelColor(i , color.r*VU_brightness[i]/255 , color.g*VU_brightness[i]/255 , color.b*VU_brightness[i]/255 );
+	}
+	pixels1.show();
+}
 
-    time_measure=time_measure+MEASURE_TICK;
+void stepLedFlag() {
+	led_flag = (led_flag%6) + 1;
+}
+
+void updateState() {
+	if(led_flag == 0) {
+		convert_VU(average_r*8);
+	} else {
+		convert_VU(x*16);
+	}
+	
+	updatePixels(colorStates[led_flag]);
+	
+	if(led_flag%2) {
+		// paratlan 'led_flag'
+		if(x<255){
+			x=x+1;
+		} else {
+			stepLedFlag();
+		}
+	} else {
+		// paros 'led_flag'
+		if(x>0) {
+			x=x-1;
+		} else {
+			stepLedFlag();
+		}
+	}
+}
+
+void measure() {
+	time_measure=time_measure+MEASURE_TICK;
 
     for (int i=0; i<(ANALOG_SAMPLES-1); i++){
       analog_r[i]=analog_r[i+1];
@@ -93,134 +137,18 @@ void loop() {
     Serial.print("Audio L:");
     Serial.println(average_l);
     Serial.println("");
+}
 
+void loop() {
+  if(millis()>=time_measure){
+	  measure();
   }
-
 
   if(millis()>=time_effect){
     //Serial.print("Time:");
     //Serial.println(time_effect);
-    
     time_effect=time_effect+EFFECT_TICK;
-
-    if (0==led_flag){
-    
-      convert_VU(average_r*8);
-
-      Red=20;
-      Green=0;
-      Blue=0;
-
-      for(int i=0 ; i<VU_PIX_NUM ; i++){
-        pixels1.setPixelColor(i , Red*VU_brightness[i]/255 , Green*VU_brightness[i]/255 , Blue*VU_brightness[i]/255);
-      }
-
-      pixels1.show();
-
-      //led_flag=1;
-      Serial.println("Red");
-      return;     
-    }
-    
-    if (1==led_flag){
-
-      convert_VU(x*16);
-      Red=20;
-      Green=0;
-      Blue=0;
-
-      for(int i=0 ; i<VU_PIX_NUM ; i++){
-        pixels1.setPixelColor(i , Red*VU_brightness[i]/255 , Green*VU_brightness[i]/255 , Blue*VU_brightness[i]/255 );
-      }
-
-      pixels1.show();
-      if(x<255){x=x+1;}else{led_flag=2;}
-      return;
-
-    }
-
-    if (2==led_flag){
-
-      convert_VU(x*16);
-      Red=20;
-      Green=0;
-      Blue=0;
-
-      for(int i=0 ; i<VU_PIX_NUM ; i++){
-        pixels1.setPixelColor(i , Red*VU_brightness[i]/255 , Green*VU_brightness[i]/255 , Blue*VU_brightness[i]/255 );
-      }
-
-      pixels1.show();
-      if(x>0){x=x-1;}else{led_flag=3;}
-
-    }
-
-    if (3==led_flag){
-
-      convert_VU(x*16);
-      Red=0;
-      Green=20;
-      Blue=0;
-
-      for(int i=0 ; i<VU_PIX_NUM ; i++){
-        pixels1.setPixelColor(i , Red*VU_brightness[i]/255 , Green*VU_brightness[i]/255 , Blue*VU_brightness[i]/255 );
-      }
-
-      pixels1.show();
-      if(x<255){x=x+1;}else{led_flag=4;}
-      return;
-
-    }
-
-    if (4==led_flag){
-
-      convert_VU(x*16);
-      Red=0;
-      Green=20;
-      Blue=0;
-
-      for(int i=0 ; i<VU_PIX_NUM ; i++){
-        pixels1.setPixelColor(i , Red*VU_brightness[i]/255 , Green*VU_brightness[i]/255 , Blue*VU_brightness[i]/255 );
-      }
-
-      pixels1.show();
-      if(x>0){x=x-1;}else{led_flag=5;}
-
-    }
-
-      if (5==led_flag){
-
-      convert_VU(x*16);
-      Red=0;
-      Green=0;
-      Blue=20;
-
-      for(int i=0 ; i<VU_PIX_NUM ; i++){
-        pixels1.setPixelColor(i , Red*VU_brightness[i]/255 , Green*VU_brightness[i]/255 , Blue*VU_brightness[i]/255 );
-      }
-
-      pixels1.show();
-      if(x<255){x=x+1;}else{led_flag=6;}
-      return;
-
-    }
-
-    if (6==led_flag){
-
-      convert_VU(x*16);
-      Red=0;
-      Green=0;
-      Blue=20;
-
-      for(int i=0 ; i<VU_PIX_NUM ; i++){
-        pixels1.setPixelColor(i , Red*VU_brightness[i]/255 , Green*VU_brightness[i]/255 , Blue*VU_brightness[i]/255 );
-      }
-
-      pixels1.show();
-      if(x>0){x=x-1;}else{led_flag=1;}
-
-    }
-
+	updateState();
     //Serial.println(time_effect);
   }
 }
