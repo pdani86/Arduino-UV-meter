@@ -46,9 +46,9 @@ void setup() {
   server.begin();
   server.setNoDelay(true);
 
-  Serial.print("Ready! Use 'telnet ");
+  Serial.print("Ready!");
   Serial.print(WiFi.localIP());
-  Serial.println(" 23' to connect");
+  //Serial.println(" 23' to connect");
 }
 
 unsigned long lastMillis = 0;

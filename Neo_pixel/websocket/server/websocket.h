@@ -84,10 +84,35 @@ void genWsAcceptKey(const char* key, char* dst, int dstLen) {
 }
 */
 
+void fixShaEndianness(byte* b) {
+	byte tmp[4];
+	for(int i=0;i<5;i++) {
+		memcpy(tmp, b, 4);
+		b[0] = tmp[3];
+		b[1] = tmp[2];
+		b[2] = tmp[1];
+		b[3] = tmp[0];
+		b += 4;
+	}
+}
+
 String genWsAcceptKey(const String& key) {
   String keyStr = String(key) + String(WEBSOCKET_UUID);
-  char sha1[20];
+  byte sha1[20];
+  
+  Serial.println("Key:");
+  Serial.println(key);
+  Serial.println("KeyLen:");
+  Serial.println(key.length());
+  
   SimpleSHA1::generateSHA((uint8_t*)keyStr.c_str(), 8*keyStr.length(), (uint32_t*)sha1);
+  fixShaEndianness(sha1);
+  
+  /*Serial.println(sha1[0]);
+  Serial.println(sha1[1]);
+  Serial.println(sha1[2]);
+  Serial.println(sha1[3]);*/
+  
   char b64_outbuf[40];
   auto b64_len = encode_base64((byte*)sha1, sizeof(sha1), (byte*)b64_outbuf);
   b64_outbuf[b64_len] = 0;
