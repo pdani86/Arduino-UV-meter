@@ -1,3 +1,9 @@
+
+#include "wifi/wifi_ws_server.h"
+
+
+
+/*
 //UV meter - Neo pixel
 
 #include <Adafruit_NeoPixel.h>
@@ -243,7 +249,7 @@ void convert_VU(unsigned long VU_meter){
       }
   }
 }
-
+*/
 /*
 //Convert Pixel color to R G B
       

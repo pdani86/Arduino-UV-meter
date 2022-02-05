@@ -1,44 +1,9 @@
 #include <WiFi.h>
 #include <WiFiMulti.h>
 
+#include "../websocket/server/websocket.h"
+
 WiFiMulti wifiMulti;
-
-const char* websocketUpgradeResponse =
-	"HTTP/1.1 101 Switching Protocols\r\n"
-	"Upgrade: websocket\r\n"
-	"Connection: Upgrade\r\n"
-	"Access-Control-Allow-Origin: *\r\n"
-	"\r\n";
-
-  enum class OPCODE {
-	OC_CONTINUATION = 0x00,
-	OC_TEXT = 0x01,
-	OC_BINARY = 0x02,
-
-	OC_RESERVED_X3 = 0x03,
-	OC_RESERVED_X4 = 0x04,
-	OC_RESERVED_X5 = 0x05,
-	OC_RESERVED_X6 = 0x06,
-	OC_RESERVED_X7 = 0x07,
-
-	OC_CLOSE = 0x08,
-	OC_PING = 0x09,
-	OC_PONG = 0x0A,
-
-	OC_RESERVED_XB = 0x0b,
-	OC_RESERVED_XC = 0x0c,
-	OC_RESERVED_XD = 0x0d,
-	OC_RESERVED_XE = 0x0e,
-	OC_RESERVED_XF = 0x0f
-};
-
-
-void getWebsocketTextHeader(int len, uint8_t& b0, uint8_t& b1) {
-	//if(len>125) return; // not supported
-	b0 = ((byte)OPCODE::OC_TEXT) << 4 | 0x01;
-	b1 = len << 1;
-}
-
 
 //how many clients should be able to telnet to this ESP32
 #define MAX_SRV_CLIENTS 1
@@ -89,58 +54,78 @@ void setup() {
 unsigned long lastMillis = 0;
 const long intervalMs = 2000;
 
-
 // TODO per client
-const char* wsKeyStr = "WebSocket-Key: ";
-int wsKeyStrLen = 15;
-int wsKeyParsePos = 0;
-int wsKeyValParsePos = 0;
-bool wsKeyStarted = false;
-bool wsKeyReady = false;
-bool upgradeSent = false;
-char wsKey[48];
-
-void initWsKeyParse() {
-  wsKeyParsePos = 0;
-  wsKeyValParsePos = 0;
-  wsKeyStarted = false;
-  wsKeyReady = false;
-  upgradeSent = false;
-}
+const char* WS_KEY_STR = "WebSocket-Key: ";
 
 void handleIncoming(WiFiClient& client) {
   if(client.available()){
       auto c = (char)client.read();
-      if(!wsKeyReady) {
-        if(!wsKeyStarted) {
-          if(c == wsKeyStr[wsKeyParsePos]) {
-            ++wsKeyParsePos;
-            if(wsKeyParsePos >= wsKeyStrLen) {
-              wsKeyStarted = false;
-              wsKeyValParsePos = 0;
-            }
-          } else {
-            wsKeyValParsePos = 0;
-            wsKey[wsKeyValParsePos++] = c;
-            if(c=='\r' || wsKeyValParsePos>=47) {
-              wsKey[wsKeyValParsePos] = 0;
-              wsKeyReady = true;
-              Serial.println(wsKey);
-              client.write(websocketUpgradeResponse);
-            }
-          }
-          
-        } else {
-
-        }
-      }
       Serial.print((char)c);
     }
 }
 
+bool waitWsKeyStart(WiFiClient& client) {
+	int wsKeyStrLen = strlen(WS_KEY_STR);
+	int wsKeyParsePos = 0;
+	
+	// auto startTime = millis();
+	// const int waitTimeMs = 3000;
+	
+	while(client.connected()) {		
+		if(!client.available()) continue;
+		auto c = client.read();
+		if(c == WS_KEY_STR[wsKeyParsePos]) {
+			++wsKeyParsePos;
+			if(wsKeyParsePos >= wsKeyStrLen) {
+			  return true;
+			}
+		} else {
+			wsKeyParsePos = 0;
+		}
+		
+	}
+	return false;
+}
+
+String readWsKey(WiFiClient& client) {
+	Serial.println("readWsKey");
+	int wsKeyValParsePos = 0;
+	char wsKey[48];
+	wsKey[0] = 0;
+	while(client.connected()) {
+		if(!client.available()) continue;
+		auto c = client.read();
+		if(c == '\r' || wsKeyValParsePos>=sizeof(wsKey)) {
+			break;
+		}
+		Serial.print("new char for ws key: ");
+		Serial.print((char)c);
+		wsKey[wsKeyValParsePos++] = c;
+	}
+	wsKey[wsKeyValParsePos] = 0;
+	return String(wsKey);
+}
+
+void wsAcceptUpgrade(WiFiClient& client) {
+	Serial.println("wsAcceptUpgrade");
+	
+	if(!waitWsKeyStart(client)) {client.stop();}
+	auto wsKey = readWsKey(client);
+	auto acceptKey = genWsAcceptKey(wsKey);
+	
+	Serial.println("Request Key: ");
+	Serial.println(wsKey);
+	Serial.println("Accept Key: ");
+	Serial.println(acceptKey);
+
+	client.write(websocketUpgradeResponse);
+	client.write("Sec-WebSocket-Accept: ");
+	client.write(acceptKey.c_str());
+	client.write("\r\n\r\n");
+}
+
 void handleClient(WiFiClient& client) {
   handleIncoming(client);
-  if(!wsKeyReady) return;
   auto now = millis();
   long dtMs = now - lastMillis;
   if(dtMs >= intervalMs) {
@@ -153,18 +138,10 @@ void handleClient(WiFiClient& client) {
     client.write(&b1, 1);
     client.write(text, textLen);
   }
-  /*while(serverClients[i].available()) {
-      auto c = serverClients[i].read();
-      Serial.write(c);
-      serverClients[i].write(c);
-      //Serial2.write(c);
-    }*/
 }
 
-
-
 void handleNewClient() {
-  initWsKeyParse();
+  
   int i;
 for(i = 0; i < MAX_SRV_CLIENTS; i++){
     //find free/disconnected spot
@@ -175,6 +152,8 @@ for(i = 0; i < MAX_SRV_CLIENTS; i++){
       Serial.print("New client: ");
       Serial.print(i); Serial.print(' ');
       Serial.println(serverClients[i].remoteIP());
+	  
+	  wsAcceptUpgrade(serverClients[i]);
       break;
     }
   }

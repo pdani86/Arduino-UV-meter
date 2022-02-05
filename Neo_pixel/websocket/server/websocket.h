@@ -1,3 +1,6 @@
+#include <SimpleSHA1.h>
+#include <base64.hpp>
+
 
   // 0                   1                   2                   3
   // 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -21,9 +24,8 @@
 const char* websocketUpgradeResponse =
 	"HTTP/1.1 101 Switching Protocols\r\n"
 	"Upgrade: websocket\r\n"
-	"Connection: Upgrade\r\n"
-	"Access-Control-Allow-Origin: *\r\n"
-	"\r\n";
+	"Sec-WebSocket-Version: 13\r\n"
+	"Connection: Upgrade\r\n"; // ezutan kell meg az accept key
 
 /*
 struct Header {
@@ -64,8 +66,10 @@ enum class OPCODE {
 };
 
 const char* const WEBSOCKET_UUID("258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
+int WEBSOCKET_UUID_LEN = strlen(WEBSOCKET_UUID);
 const char* const WEBSOCKET_VERSION("13");
 
+/*
 void genWsAcceptKey(const char* key, char* dst, int dstLen) {
 	/*std::string accept(key);
 	accept += WEBSOCKET_UUID;
@@ -76,15 +80,23 @@ void genWsAcceptKey(const char* key, char* dst, int dstLen) {
 	asl::security::Base64Encoder base(ss);
 	base.write((const char*)&hash[0], hash.size());
 	base.close();
-	return ss.str();*/
+	return ss.str();
 }
+*/
 
+String genWsAcceptKey(const String& key) {
+  String keyStr = String(key) + String(WEBSOCKET_UUID);
+  char sha1[20];
+  SimpleSHA1::generateSHA((uint8_t*)keyStr.c_str(), 8*keyStr.length(), (uint32_t*)sha1);
+  char b64_outbuf[40];
+  auto b64_len = encode_base64((byte*)sha1, sizeof(sha1), (byte*)b64_outbuf);
+  b64_outbuf[b64_len] = 0;
+  return String(b64_outbuf);
+}
 
 void getWebsocketTextHeader(int len, uint8_t& b0, uint8_t& b1) {
 	//if(len>125) return; // not supported
-	b0 = OPCODE::OC_TEXT << 4 | 0x01;
+	b0 = ((byte)OPCODE::OC_TEXT) << 4 | 0x01;
 	b1 = len << 1;
 }
-
-
 
