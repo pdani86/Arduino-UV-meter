@@ -1,8 +1,18 @@
 <html>
 <head>
+
+<style>
+#textarea {
+	max-height: 200px;
+    border: black 2px solid;
+    overflow: auto;
+	padding: 5px;
+}
+</style>
+
 <script src="websocket.js"></script>
 </head>
-<body>
-<textarea id="textarea"></textarea>
+<body onload="init()">
+<div id="textarea"></div>
 </body>
 </html>

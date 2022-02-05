@@ -1,6 +1,10 @@
 // Create WebSocket connection.
-const socket = new WebSocket('ws://192.168.0.31:9876');
-const textarea = document.getElementById("textarea");
+var socket = new WebSocket('ws://192.168.0.31:9876');
+var textarea;
+
+function init() {
+	textarea = document.getElementById("textarea");
+}
 
 // Connection opened
 socket.addEventListener('open', function (event) {
@@ -9,6 +13,8 @@ socket.addEventListener('open', function (event) {
 
 // Listen for messages
 socket.addEventListener('message', function (event) {
-    console.log('Message from server ', event.data);
-	// textarea. 
+    //console.log('Message from server ', event.data);
+	var div = document.createElement("div");
+	div.innerText = event.data;
+	textarea.appendChild(div);
 });
