@@ -121,7 +121,7 @@ String genWsAcceptKey(const String& key) {
 
 void getWebsocketTextHeader(int len, uint8_t& b0, uint8_t& b1) {
 	//if(len>125) return; // not supported
-	b0 = ((byte)OPCODE::OC_TEXT) << 4 | 0x01;
-	b1 = len << 1;
+	b0 = ((byte)OPCODE::OC_TEXT) | (0x01 << 7); // FIN
+	b1 = len /*| (0 << 7)*/;
 }
 
