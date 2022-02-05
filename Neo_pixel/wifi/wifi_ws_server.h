@@ -18,8 +18,8 @@ void setup() {
   Serial.println("\nConnecting");
 
   wifiMulti.addAP(ssid, password);
-  wifiMulti.addAP("ssid_from_AP_2", "your_password_for_AP_2");
-  wifiMulti.addAP("ssid_from_AP_3", "your_password_for_AP_3");
+  //wifiMulti.addAP("ssid_from_AP_2", "your_password_for_AP_2");
+  //wifiMulti.addAP("ssid_from_AP_3", "your_password_for_AP_3");
 
   Serial.println("Connecting Wifi ");
   for (int loops = 10; loops > 0; loops--) {
@@ -51,12 +51,6 @@ void setup() {
   //Serial.println(" 23' to connect");
 }
 
-unsigned long lastMillis = 0;
-const long intervalMs = 2000;
-
-// TODO per client
-const char* WS_KEY_STR = "WebSocket-Key: ";
-
 void handleIncoming(WiFiClient& client) {
   if(client.available()){
       auto c = (char)client.read();
@@ -64,67 +58,10 @@ void handleIncoming(WiFiClient& client) {
     }
 }
 
-bool waitWsKeyStart(WiFiClient& client) {
-	int wsKeyStrLen = strlen(WS_KEY_STR);
-	int wsKeyParsePos = 0;
-	
-	// auto startTime = millis();
-	// const int waitTimeMs = 3000;
-	
-	while(client.connected()) {		
-		if(!client.available()) continue;
-		auto c = client.read();
-		if(c == WS_KEY_STR[wsKeyParsePos]) {
-			++wsKeyParsePos;
-			if(wsKeyParsePos >= wsKeyStrLen) {
-			  return true;
-			}
-		} else {
-			wsKeyParsePos = 0;
-		}
-		
-	}
-	return false;
-}
-
-String readWsKey(WiFiClient& client) {
-	Serial.println("readWsKey");
-	int wsKeyValParsePos = 0;
-	char wsKey[48];
-	wsKey[0] = 0;
-	while(client.connected()) {
-		if(!client.available()) continue;
-		auto c = client.read();
-		if(c == '\r' || wsKeyValParsePos>=sizeof(wsKey)) {
-			break;
-		}
-		Serial.print("new char for ws key: ");
-		Serial.print((char)c);
-		wsKey[wsKeyValParsePos++] = c;
-	}
-	wsKey[wsKeyValParsePos] = 0;
-	return String(wsKey);
-}
-
-void wsAcceptUpgrade(WiFiClient& client) {
-	Serial.println("wsAcceptUpgrade");
-	
-	if(!waitWsKeyStart(client)) {client.stop();}
-	auto wsKey = readWsKey(client);
-	auto acceptKey = genWsAcceptKey(wsKey);
-	
-	Serial.println("Request Key: ");
-	Serial.println(wsKey);
-	Serial.println("Accept Key: ");
-	Serial.println(acceptKey);
-
-	client.write(websocketUpgradeResponse);
-	client.write("Sec-WebSocket-Accept: ");
-	client.write(acceptKey.c_str());
-	client.write("\r\n\r\n");
-}
-
 void handleClient(WiFiClient& client) {
+  static unsigned long lastMillis = 0;
+  const long intervalMs = 2000;
+
   handleIncoming(client);
   auto now = millis();
   long dtMs = now - lastMillis;
@@ -133,7 +70,7 @@ void handleClient(WiFiClient& client) {
     byte b0, b1;
     const char* text = "Hello";
     int textLen = 5;
-    getWebsocketTextHeader(5, b0, b1);
+    WebSocket::getWebsocketTextHeader(5, b0, b1);
     client.write(&b0, 1);
     client.write(&b1, 1);
     client.write(text, textLen);
@@ -141,21 +78,20 @@ void handleClient(WiFiClient& client) {
 }
 
 void handleNewClient() {
-  
   int i;
-for(i = 0; i < MAX_SRV_CLIENTS; i++){
+	for(i = 0; i < MAX_SRV_CLIENTS; i++){
     //find free/disconnected spot
-    if (!serverClients[i] || !serverClients[i].connected()){
-      if(serverClients[i]) serverClients[i].stop();
-      serverClients[i] = server.available();
-      if (!serverClients[i]) Serial.println("available broken");
-      Serial.print("New client: ");
-      Serial.print(i); Serial.print(' ');
-      Serial.println(serverClients[i].remoteIP());
-	  
-	  wsAcceptUpgrade(serverClients[i]);
-      break;
-    }
+		if(!serverClients[i] || !serverClients[i].connected()){
+			if(serverClients[i]) serverClients[i].stop();
+			serverClients[i] = server.available();
+			if (!serverClients[i]) Serial.println("available broken");
+			Serial.print("New client: ");
+			Serial.print(i); Serial.print(' ');
+			Serial.println(serverClients[i].remoteIP());
+
+			WebSocket::acceptUpgrade(serverClients[i]);
+			break;
+		}
   }
   if (i >= MAX_SRV_CLIENTS) {
     //no free/disconnected spot so reject
@@ -174,8 +110,7 @@ void loop() {
     for(i = 0; i < MAX_SRV_CLIENTS; i++){
       if (serverClients[i] && serverClients[i].connected()){
         handleClient(serverClients[i]);
-      }
-      else {
+      } else {
         if (serverClients[i]) {
           serverClients[i].stop();
         }

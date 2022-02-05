@@ -21,12 +21,6 @@
  // |                     Payload Data continued ...                |
  // +---------------------------------------------------------------+
 
-const char* websocketUpgradeResponse =
-	"HTTP/1.1 101 Switching Protocols\r\n"
-	"Upgrade: websocket\r\n"
-	"Sec-WebSocket-Version: 13\r\n"
-	"Connection: Upgrade\r\n"; // ezutan kell meg az accept key
-
 /*
 struct Header {
 	Header();
@@ -42,7 +36,7 @@ struct Header {
 	};
 };
 */
-
+namespace WebSocket {
 enum class OPCODE {
 	OC_CONTINUATION = 0x00,
 	OC_TEXT = 0x01,
@@ -65,24 +59,15 @@ enum class OPCODE {
 	OC_RESERVED_XF = 0x0f
 };
 
+const char* websocketUpgradeResponse =
+	"HTTP/1.1 101 Switching Protocols\r\n"
+	"Upgrade: websocket\r\n"
+	"Sec-WebSocket-Version: 13\r\n"
+	"Connection: Upgrade\r\n"; // ezutan kell meg az accept key
+
 const char* const WEBSOCKET_UUID("258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
 int WEBSOCKET_UUID_LEN = strlen(WEBSOCKET_UUID);
 const char* const WEBSOCKET_VERSION("13");
-
-/*
-void genWsAcceptKey(const char* key, char* dst, int dstLen) {
-	/*std::string accept(key);
-	accept += WEBSOCKET_UUID;
-	asl::security::SHA1 sha;
-	sha.update(accept.c_str(), accept.size());
-	asl::security::SHA1::hash_t hash = sha.final();
-	std::stringstream ss;
-	asl::security::Base64Encoder base(ss);
-	base.write((const char*)&hash[0], hash.size());
-	base.close();
-	return ss.str();
-}
-*/
 
 void fixShaEndianness(byte* b) {
 	byte tmp[4];
@@ -100,18 +85,8 @@ String genWsAcceptKey(const String& key) {
   String keyStr = String(key) + String(WEBSOCKET_UUID);
   byte sha1[20];
   
-  Serial.println("Key:");
-  Serial.println(key);
-  Serial.println("KeyLen:");
-  Serial.println(key.length());
-  
   SimpleSHA1::generateSHA((uint8_t*)keyStr.c_str(), 8*keyStr.length(), (uint32_t*)sha1);
   fixShaEndianness(sha1);
-  
-  /*Serial.println(sha1[0]);
-  Serial.println(sha1[1]);
-  Serial.println(sha1[2]);
-  Serial.println(sha1[3]);*/
   
   char b64_outbuf[40];
   auto b64_len = encode_base64((byte*)sha1, sizeof(sha1), (byte*)b64_outbuf);
@@ -120,8 +95,77 @@ String genWsAcceptKey(const String& key) {
 }
 
 void getWebsocketTextHeader(int len, uint8_t& b0, uint8_t& b1) {
-	//if(len>125) return; // not supported
+	// if(len>125) return; // not supported
 	b0 = ((byte)OPCODE::OC_TEXT) | (0x01 << 7); // FIN
 	b1 = len /*| (0 << 7)*/;
 }
 
+template<typename T>
+bool waitWsKeyStart(T& client) {
+	const char* WS_KEY_STR = "WebSocket-Key: ";
+	int wsKeyStrLen = strlen(WS_KEY_STR);
+	int wsKeyParsePos = 0;
+	
+	// auto startTime = millis();
+	// const int waitTimeMs = 3000;
+	
+	while(client.connected()) {		
+		if(!client.available()) continue;
+		auto c = client.read();
+		if(c == WS_KEY_STR[wsKeyParsePos]) {
+			++wsKeyParsePos;
+			if(wsKeyParsePos >= wsKeyStrLen) {
+			  return true;
+			}
+		} else {
+			wsKeyParsePos = 0;
+		}
+	}
+	return false;
+}
+
+template<typename T>
+void readWsFrame(T& client) {
+	while(client.connected() && !client.available());
+	if(!client.available()) return;
+	auto b0 = client.read();
+	while(client.connected() && !client.available());
+	if(!client.available()) return;
+	auto b1 = client.read();
+	auto opcode = b0 & 0x0f;
+	bool isFinal = b0 & (1 << 7);
+	int len7 = b1 & 0x7f;
+	bool masked = b1 & (1 << 7);
+	if(len7>125) return; // not supported
+}
+
+
+template<typename T>
+String readWsKey(T& client) {
+	int wsKeyValParsePos = 0;
+	char wsKey[48];
+	wsKey[0] = 0;
+	while(client.connected()) {
+		if(!client.available()) continue;
+		auto c = client.read();
+		if(c == '\r' || wsKeyValParsePos>=sizeof(wsKey)) {
+			break;
+		}
+		wsKey[wsKeyValParsePos++] = c;
+	}
+	wsKey[wsKeyValParsePos] = 0;
+	return String(wsKey);
+}
+
+template<typename T>
+void acceptUpgrade(T& client) {
+	if(!waitWsKeyStart(client)) {client.stop();}
+	auto wsKey = readWsKey(client);
+	auto acceptKey = genWsAcceptKey(wsKey);
+	client.write(websocketUpgradeResponse);
+	client.write("Sec-WebSocket-Accept: ");
+	client.write(acceptKey.c_str());
+	client.write("\r\n\r\n");
+}
+
+}
