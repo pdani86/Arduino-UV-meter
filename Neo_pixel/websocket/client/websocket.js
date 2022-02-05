@@ -1,9 +1,14 @@
 // Create WebSocket connection.
 var socket = new WebSocket('ws://192.168.0.31:9876');
 var textarea;
+var btn;
 
 function init() {
 	textarea = document.getElementById("textarea");
+	btn = document.getElementById("btn");
+	btn.addEventListener("click", function(event) {
+		socket.send('Hello Server!');
+	});
 }
 
 // Connection opened

@@ -125,18 +125,50 @@ bool waitWsKeyStart(T& client) {
 }
 
 template<typename T>
-void readWsFrame(T& client) {
+String readWsFrame(T& client) {
 	while(client.connected() && !client.available());
-	if(!client.available()) return;
+	if(!client.available()) return {};
 	auto b0 = client.read();
 	while(client.connected() && !client.available());
-	if(!client.available()) return;
+	if(!client.available()) return {};
 	auto b1 = client.read();
 	auto opcode = b0 & 0x0f;
 	bool isFinal = b0 & (1 << 7);
 	int len7 = b1 & 0x7f;
 	bool masked = b1 & (1 << 7);
-	if(len7>125) return; // not supported
+	
+	if(opcode != (int)OPCODE::OC_TEXT) {
+		client.stop();
+		Serial.println("opcode not text");
+		return {}; // not supported
+	}
+	
+	if(len7>125) {
+		client.stop();
+		Serial.println("ws frame length not supported");
+		return {}; // not supported
+	}
+	byte mask[] = {0, 0, 0, 0};
+	if(masked) {
+		while(client.connected() && !client.available()); if(!client.available()) return {};
+		mask[0] = client.read();
+		while(client.connected() && !client.available()); if(!client.available()) return {};
+		mask[1] = client.read();
+		while(client.connected() && !client.available()); if(!client.available()) return {};
+		mask[2] = client.read();
+		while(client.connected() && !client.available()); if(!client.available()) return {};
+		mask[3] = client.read();
+	}
+	
+	char str[128];
+	int maskIx = 0;
+	for(int i=0; i<len7; ++i) {
+		while(client.connected() && !client.available()); if(!client.available()) return {};
+		str[i] = client.read() ^ (mask[maskIx]);
+		maskIx = (maskIx+1) % 4;
+	}
+	str[len7] = 0;
+	return String(str);
 }
 
 
@@ -157,11 +189,29 @@ String readWsKey(T& client) {
 	return String(wsKey);
 }
 
+
+template<typename T>
+void waitEndOfHttpHeader(T& client) {
+	const char* expect = "\r\n\r\n";
+	int expectIx = 0;
+	while(client.connected()) {
+		while(client.connected() && !client.available());
+		auto c = client.read();
+		if(c == expect[expectIx]) {
+			++expectIx;
+			if(expectIx==4) return;
+		} else {
+			expectIx = 0;
+		}
+	}
+}
+
 template<typename T>
 void acceptUpgrade(T& client) {
 	if(!waitWsKeyStart(client)) {client.stop();}
 	auto wsKey = readWsKey(client);
 	auto acceptKey = genWsAcceptKey(wsKey);
+	waitEndOfHttpHeader(client);
 	client.write(websocketUpgradeResponse);
 	client.write("Sec-WebSocket-Accept: ");
 	client.write(acceptKey.c_str());

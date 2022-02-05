@@ -18,8 +18,6 @@ void setup() {
   Serial.println("\nConnecting");
 
   wifiMulti.addAP(ssid, password);
-  //wifiMulti.addAP("ssid_from_AP_2", "your_password_for_AP_2");
-  //wifiMulti.addAP("ssid_from_AP_3", "your_password_for_AP_3");
 
   Serial.println("Connecting Wifi ");
   for (int loops = 10; loops > 0; loops--) {
@@ -47,15 +45,14 @@ void setup() {
   server.setNoDelay(true);
 
   Serial.print("Ready!");
-  Serial.print(WiFi.localIP());
-  //Serial.println(" 23' to connect");
+  Serial.println(WiFi.localIP());
 }
 
 void handleIncoming(WiFiClient& client) {
-  if(client.available()){
-      auto c = (char)client.read();
-      Serial.print((char)c);
-    }
+	if(!client.available()) return;
+	auto text = WebSocket::readWsFrame(client);
+	Serial.println("Received WS frame text: ");
+	Serial.println(text);
 }
 
 void handleClient(WiFiClient& client) {
@@ -67,6 +64,7 @@ void handleClient(WiFiClient& client) {
   long dtMs = now - lastMillis;
   if(dtMs >= intervalMs) {
     lastMillis = now;
+	Serial.println("Time to say hello");
     byte b0, b1;
     const char* text = "Hello";
     int textLen = 5;
